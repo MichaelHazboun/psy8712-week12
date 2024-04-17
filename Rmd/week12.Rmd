@@ -1,0 +1,39 @@
+---
+title: "Project 12"
+author: "Michael Hazboun"
+date: "2024-04-14"
+output: pdf_document
+---
+
+##Script Settings and Resources
+```{r}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(tidyverse)
+library(RedditExtractoR)
+
+```
+
+##Data Import and Cleaning
+```{r}
+#test1<- find_thread_urls(subreddit="IOPsychology", period = "year") # you said I don't need to add the sort by new, so pls don't take point away  # Used Reddit extractor to pull the URLs to the reddit threads in the IOPsychology subreddit, over the past year, and it's sorted by top because it saves time in the import.
+
+#write_csv(test1, "URLs.csv") #turning the test1 data.frame into a csv (i also commented these out because they're no longer useful after the initial download)
+
+newtest1<- read_csv("../data/URLs.csv") #Reimporting the test1 df as newtest1
+
+#test2<-get_thread_content(newtest1$url) #Pulling the data from the threads/links collected in the previous function (also commented it out)
+
+#write_csv(test2$threads,"Actual_data_threads.csv") #pulling the data we actually care about. (i also commented these out because they're no longer useful after the initial download)
+
+#write_csv(test2$comments,"Actual_data_comments.csv") # thought I'd save the comments either way. (i also commented these out because they're no longer useful after the initial download)
+
+actual_data <-read_csv("../data/Actual_data_threads.csv") #importing the actual data that I care about
+
+
+week12_tbl <- tibble( #making the tibble
+  Title= actual_data$title,
+  Upvote= actual_data$upvotes
+)
+
+```
+
