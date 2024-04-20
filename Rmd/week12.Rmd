@@ -10,7 +10,17 @@ output: pdf_document
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
 library(RedditExtractoR)
-
+library(tm)
+library(qdap)
+library(textstem)
+library(topicmodels)
+library(ldatuning)
+library(doParallel)
+library(tidytext)
+library(topicmodels)
+library(wordcloud)
+library(RWeka)
+library(caret)
 ```
 
 ##Data Import and Cleaning
@@ -34,6 +44,159 @@ week12_tbl <- tibble( #making the tibble
   Title= actual_data$title,
   Upvote= actual_data$upvotes
 )
+
+#Start of NLP section, still feels like data cleaning
+compare_them <- function(x, y) {
+  casenum <- sample(1:nrow(week12_tbl), 1)
+  print(x[[casenum]]$content)
+  print(y[[casenum]]$content)
+}
+
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$Title))
+io_corpus <- io_corpus_original%>%
+  tm_map(content_transformer(replace_abbreviation)) %>%
+  tm_map(content_transformer(replace_contraction)) %>%
+  tm_map(content_transformer(str_to_lower)) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeWords, c(stopwords("en"), "io","industrialorganizational", "io psychology","iopsychology", "io psych", "iopsych", "organisational psychology", "organizational psychology", "org psych", "io psychologist","iopsychologist", "industrial and organizational psychology", "industrial and organisational psychology")) %>% #This was one of the ones present "I.O phycology", I'm not grabbing miss spellings of psych 
+  tm_map(stripWhitespace) %>%
+  tm_map(stemDocument, language="english")
+
+
+compare_them(io_corpus_original,io_corpus) #comparison function
+
+
+shinnything <- function(x) NGramTokenizer(x, Weka_control(min=1, max=2)) #making it for unigram and bigrams
+
+
+io_dtm_test <- DocumentTermMatrix(io_corpus,control=list(tokenize=shinnything)) #making the dtm
+ io_dtm_test %>% as.matrix( ) %>% as.tibble() %>% view() #(just to see things worked)
+
+tokenCounts <- apply(io_dtm_test, 1, sum) #getting the titles that were completely erased
+
+indices_zero <- which(tokenCounts == 0)
+
+io_dtm <- io_dtm_test[tokenCounts > 0, ] # filtering out the erased titles
+
+io_dtm_tbl <- io_dtm %>% #making it a tibble for wordcloud later
+  as.matrix() %>%
+  as.tibble()
+
+io_slim_dtm<- removeSparseTerms(io_dtm, .997)  # I'm assuming the N:k ratio is refering to the number of 1s per column, and this specificity got me close enough, .996 had no N of 2 while .997 and .998 had the same results and was the same as original
+# io_dtm$ncol #personal checking
+# io_slim_dtm$ncol
+# io_slim_dtm %>% as.matrix( ) %>% as.tibble() %>% view()
+```
+
+##Analysis
+
+```{r}
+tuning <- FindTopicsNumber(
+  io_dtm,
+  topics = seq(2,15,1), # tried 2,10 first and wasn't very clear. With 2,15 it became clear that 5 topics or so is the ideal!
+  metrics = c(
+    "Griffiths2004",
+    "CaoJuan2009",
+    "Arun2010",
+    "Deveaud2014"),
+  verbose = T,
+)
+FindTopicsNumber_plot(tuning)
+
+
+lda_results <- LDA(io_dtm,5) #just stole this from the slides/your work (runs the lda on the corpus for 5 topics)
+betas_wow<- tidy(lda_results, matrix="beta") #pull the betas
+
+# View(betas_wow)
+
+
+topics_tbl <- tibble(tidy(lda_results, matrix="gamma") %>%
+  group_by(document) %>%
+  top_n(1, gamma) %>%  # Get the top topic by highest probability for each document
+  ungroup() %>%
+  rename(doc_id = document, probability = gamma) %>% #renaming
+  mutate(doc_id = as.numeric(doc_id)) %>% #making numeric
+  arrange(doc_id), #arranging by id to make it easier to check the titles later
+  original= week12_tbl$Title[-indices_zero]) %>% # add the titles for everything but the variables we removed
+  select(doc_id,original,topic,probability) # a dumb but easy and functional way of reordering the columns (forgive me for the dumb method but I am doing this between breaks in SIOP, at least commend the dedication)
+
+# View(topics_tbl)
+
+#Questions:
+#1)
+# I have very little almost no idea about what each topic is referring to... but here is my best attempt at trying to figure it out...
+# Topic 1: Things that are related to conferences, businesses, consulting, management...etc
+# Topic 2: Jobs and graduate school generally
+# Topic 3: Advice and questions related to careers and graduate school
+# Topic 4: Honestly this one seems like it's related to the scientist practitioner model in I/O
+# Topic 5: Seems like it's mainly focused on discussion, talks and similar things.
+
+#2)
+# They seem to be matching decently... It isn't perfect (I definitely missed the mark with topic 4), but the documents with the highest beta seems to align the most with what very general topics I had thought of. This provides some level of content validity for our analysis.
+
+
+#point 11
+final_tbl <- tibble( #made the final_tbl
+  topics_tbl,
+  Upvote= week12_tbl$Upvote[-indices_zero]
+  )
+
+
+#point 12
+summary(lm(Upvote~topic,data=final_tbl)) #Statistical analysis, no statistically significant difference was found
+
+# glimpse(final_tbl) # check if topic was factor
+
+final_tbl$topic <- as.factor(final_tbl$topic) #made topic factor
+
+holdout_indices <- createDataPartition(final_tbl$Upvote, p = 0.25, list = T)$Resample1 # making a holdout index to use to split data
+
+training <- final_tbl[-holdout_indices, ] #training dataset
+
+testing <- final_tbl[holdout_indices, ] #holdout/testing dataset
+
+training_folds <- createFolds(training$Upvote) #making folds
+
+model <- train( #Ran a random forest model
+  Upvote ~ topic,
+  training,
+  method="ranger",
+  na.action = na.pass,
+  preProcess = c("center","scale","zv","nzv","medianImpute"),
+  trControl = trainControl(method="cv", 
+                           number=10, 
+                           verboseIter=T, 
+                           indexOut = training_folds)
+)
+
+var(training$Upvote)
+model # the RMSEs aren't that bad, given that the variance of the testing model was around 113.
+cv <- max(model$results$Rsquared) #0.03022886 <- the cv rsquared
+holdout <- cor( #0.008629507 <-  the ho rsquared
+  predict(model, testing, na.action = na.pass),
+  testing$Upvote
+)^2
+
+# Generally, the RMSE isn't terrible, but given the absolutely abysmal rsquareds, I'd say there's not enough evidence to say that upvotes differ by/depend on topic.
+
+#Both the statistical and LM paths got us to the same conclusion.
+
+```
+
+##Visualization
+
+Looking at the word cloud, it seems as though job is a very common topic in the subreddit. In general some of the most common words were work related (i.e., job, work, career...etc), with academia seeming to be the second most common topic (with words like master[most probably referring to masters], reading [readings], research...etc).
+```{r}
+wordcloud(
+  words = names(io_dtm_tbl),
+  freq = colSums(io_dtm_tbl),
+  max.words = 25,
+  colors = brewer.pal(9, "Reds")
+)
+
+#Just because you said put it in a comment and I'd rather be safe than sorry, here is my interpretation again :)
+# Looking at the word cloud, it seems as though job is a very common topic in the subreddit. In general some of the most common words were work related (i.e., job, work, career...etc), with academia seeming to be the second most common topic (with words like master[most probably referring to masters], reading [readings], research...etc).
 
 ```
 
