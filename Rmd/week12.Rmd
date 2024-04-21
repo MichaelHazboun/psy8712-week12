@@ -60,9 +60,10 @@ io_corpus <- io_corpus_original%>%  #making pre processing corpus, did most of t
   tm_map(content_transformer(str_to_lower)) %>%
   tm_map(removeNumbers) %>%
   tm_map(removePunctuation) %>%
-  tm_map(removeWords, c(stopwords("en"), "io","industrialorganizational", "io psychology","iopsychology", "io psych", "iopsych", "organisational psychology", "organizational psychology", "org psych", "io psychologist","iopsychologist", "industrial and organizational psychology", "industrial and organisational psychology")) %>% #This was one of the ones present "I.O phycology", I'm not grabbing miss spellings of psych 
+  tm_map(removeWords, c(stopwords("en"), "io","industrialorganizational", "io psychology","iopsychology", "io psych", "iopsych", "organisational psychology", "organizational psychology", "org psych", "io psychologist","iopsychologist", "industrial and organizational psychology", "industrial and organisational psychology", "riopsychology")) %>% #This was one of the ones present "I.O phycology", I'm not grabbing miss spellings of psych 
   tm_map(stripWhitespace) %>%
-  tm_map(stemDocument, language="english")
+  tm_map(stemDocument, language="english") %>%
+  tm_map(content_transformer(lemmatize_strings))
 
 
 compare_them(io_corpus_original,io_corpus) #comparison function
@@ -122,19 +123,19 @@ topics_tbl <- tibble(tidy(lda_results, matrix="gamma") %>%
   original= week12_tbl$Title[-indices_zero]) %>% # add the titles for everything but the variables we removed
   select(doc_id,original,topic,probability) # a dumb but easy and functional way of reordering the columns (forgive me for the dumb method but I am doing this between breaks in SIOP, at least commend the dedication)
 
-# View(topics_tbl)
+View(topics_tbl)
 
 #Questions:
 #1)
 # I have very little almost no idea about what each topic is referring to... but here is my best attempt at trying to figure it out...
-# Topic 1: Things that are related to conferences, businesses, consulting, management...etc
-# Topic 2: Jobs and graduate school generally
-# Topic 3: Advice and questions related to careers and graduate school
-# Topic 4: Honestly this one seems like it's related to the scientist practitioner model in I/O
-# Topic 5: Seems like it's mainly focused on discussion, talks and similar things.
+# Topic 1: Things that are related to graduate school generally
+# Topic 2: Jobs and careers generally
+# Topic 3: Seems more related to a combination of graduate school (research) and jobs (kind of feels like they're talking about the scientist practitioner model)
+# Topic 4: Seems like it's mainly focused on discussion, talks and similar things.
+# Topic 5: Work, jobs, and programs
 
 #2)
-# They seem to be matching decently... It isn't perfect (I definitely missed the mark with topic 4), but the documents with the highest beta seems to align the most with what very general topics I had thought of. This provides some level of content validity for our analysis.
+# They seem to be matching decently... It isn't perfect , but the documents with the highest beta seems to align the most with what very general topics I had thought of. This provides some level of content validity for our analysis.
 
 
 #point 11
@@ -173,8 +174,8 @@ model <- train( #Ran a random forest model
 
 var(training$Upvote)
 model # the RMSEs aren't that bad, given that the variance of the testing model was around 113.
-cv <- max(model$results$Rsquared) #0.03022886 <- the cv rsquared
-holdout <- cor( #0.008629507 <-  the ho rsquared
+cv <- max(model$results$Rsquared) #0.04338908 <- the cv rsquared
+holdout <- cor( # 2.837987e-05 <-  the ho rsquared
   predict(model, testing, na.action = na.pass),
   testing$Upvote
 )^2
