@@ -46,14 +46,15 @@ week12_tbl <- tibble( #making the tibble
 )
 
 #Start of NLP section, still feels like data cleaning
-compare_them <- function(x, y) {
+compare_them <- function(x, y) { #made function to compare two corpora
   casenum <- sample(1:nrow(week12_tbl), 1)
   print(x[[casenum]]$content)
   print(y[[casenum]]$content)
 }
 
-io_corpus_original <- VCorpus(VectorSource(week12_tbl$Title))
-io_corpus <- io_corpus_original%>%
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$Title)) #making original corpus
+
+io_corpus <- io_corpus_original%>%  #making pre processing corpus, did most of the changes to the text prior to the remove words so I don't need to write as many variations of i/o (i made an active choice to leave SIOP because it's refering to our i/o conference but I doubt that the none i/o students would know that so I thought it would be fair to leave in)
   tm_map(content_transformer(replace_abbreviation)) %>%
   tm_map(content_transformer(replace_contraction)) %>%
   tm_map(content_transformer(str_to_lower)) %>%
@@ -71,11 +72,11 @@ shinnything <- function(x) NGramTokenizer(x, Weka_control(min=1, max=2)) #making
 
 
 io_dtm_test <- DocumentTermMatrix(io_corpus,control=list(tokenize=shinnything)) #making the dtm
- io_dtm_test %>% as.matrix( ) %>% as.tibble() %>% view() #(just to see things worked)
+# io_dtm_test %>% as.matrix( ) %>% as.tibble() %>% view() #(just to see things worked)
 
 tokenCounts <- apply(io_dtm_test, 1, sum) #getting the titles that were completely erased
 
-indices_zero <- which(tokenCounts == 0)
+indices_zero <- which(tokenCounts == 0) #pulled these out because I had to use it later
 
 io_dtm <- io_dtm_test[tokenCounts > 0, ] # filtering out the erased titles
 
