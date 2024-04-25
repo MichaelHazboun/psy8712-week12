@@ -27,7 +27,8 @@ library(caret)
 ```{r}
 #test1<- find_thread_urls(subreddit="IOPsychology", period = "year") # you said I don't need to add the sort by new, so pls don't take point away  # Used Reddit extractor to pull the URLs to the reddit threads in the IOPsychology subreddit, over the past year, and it's sorted by top because it saves time in the import.
 
-#write_csv(test1, "URLs.csv") #turning the test1 data.frame into a csv (i also commented these out because they're no longer useful after the initial download)
+#write_csv(test1, "URLs.csv") #saveRDS or write_rds in the future.
+#turning the test1 data.frame into a csv (i also commented these out because they're no longer useful after the initial download)
 
 newtest1<- read_csv("../data/URLs.csv") #Reimporting the test1 df as newtest1
 
